@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>결과 확인</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 30px; background-color: #222; color: white; }
+        .container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+        .image-card { background: #333; padding: 10px; border-radius: 10px; }
+        img { max-width: 100%; height: auto; max-height: 500px; border-radius: 5px; }
+        .transparent-bg {
+            /* 투명 배경을 확인하기 위한 체크무늬 패턴 */
+            background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), 
+                              linear-gradient(-45deg, #ccc 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #ccc 75%), 
+                              linear-gradient(-45deg, transparent 75%, #ccc 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-color: white;
+        }
+        .btn { display: inline-block; padding: 10px 20px; margin-top: 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; }
+        .btn-retry { background: #6c757d; }
+    </style>
+</head>
+<body>
+    <h1>✨ 작업 완료!</h1>
+    <div class="container">
+        <div class="image-card">
+            <h3>원본</h3>
+            <img src="{{ original_url }}">
+        </div>
+        <div class="image-card">
+            <h3>결과 (배경 제거됨)</h3>
+            <div class="transparent-bg">
+                <img src="{{ result_url }}">
+            </div>
+        </div>
+    </div>
+    <br>
+    <a href="{{ result_url }}" download class="btn">다운로드</a>
+    <a href="/remover" class="btn btn-retry">다른 사진 해보기</a>
+</body>
+</html>

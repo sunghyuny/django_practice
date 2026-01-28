@@ -205,3 +205,14 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+
+#db
+wallet/
+.env
+
+# 가상환경 및 DB파일 (기본적으로 이것들도 빼야 함)
+.venv/
+venv/
+*.sqlite3
+__pycache__/

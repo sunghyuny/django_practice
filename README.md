@@ -1,1 +1,3 @@
-# nukki
+# 잡탕밥
+
+# .venv\Scripts\activate
