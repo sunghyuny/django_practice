@@ -1,3 +1,4 @@
 # 잡탕밥
+ .venv\Scripts\activate
 
-# .venv\Scripts\activate
+ 

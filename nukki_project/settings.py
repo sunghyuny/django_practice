@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'scheduler',
     'rest_framework',
     'corsheaders',
+    'account',
 ]
 
 MIDDLEWARE = [
