@@ -22,8 +22,11 @@ from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('remover/', include('remover.urls')),
-    path('scheduler/', include('scheduler.urls')),
+    path('api/remover/', include('remover.urls')),
+    path('api/scheduler/', include('scheduler.urls')),
+
+    path('api/account/', include('account.urls')),
+
 ]
 
 

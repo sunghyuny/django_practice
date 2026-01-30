@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'scheduler',
     'rest_framework',
     'corsheaders',
+    'account',
 ]
 
 MIDDLEWARE = [
@@ -134,4 +135,27 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+
 CORS_ALLOW_ALL_ORIGINS = True
+ 
+AUTH_USER_MODEL = 'account.User'  # 앱이름.모델이름
+
+# DRF 설정
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 20,
+}
+
+
+# JWT 설정 (선택사항, 필요시 수정)
+from datetime import timedelta
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}

@@ -1,19 +1,28 @@
-# scheduler/serializers.py
 from rest_framework import serializers
 from .models import Game, Task, TaskLog, Spending
 
+class GameSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Game
+        fields = '__all__'
+
 class TaskSerializer(serializers.ModelSerializer):
-    game_name = serializers.CharField(source='game.name', read_only=True)
-    days_remaining = serializers.ReadOnlyField()
+    game_name = serializers.ReadOnlyField(source='game.name')
+    days_remaining = serializers.ReadOnlyField() # 모델의 @property 필드
 
     class Meta:
         model = Task
-        fields = ['id', 'game_name', 'title', 'reset_type', 'reward', 'priority', 'due_date', 'days_remaining']
+        fields = '__all__'
 
-# ★ 가계부용 시리얼라이저
+class TaskLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskLog
+        fields = '__all__'
+
 class SpendingSerializer(serializers.ModelSerializer):
-    game_name = serializers.CharField(source='game.name', read_only=True)
+    game_name = serializers.ReadOnlyField(source='game.name')
 
     class Meta:
         model = Spending
-        fields = ['id', 'game', 'game_name', 'item_name', 'amount', 'category', 'purchased_at', 'memo']
+        fields = '__all__'
+        read_only_fields = ('user',) # 유저는 뷰에서 자동 할당

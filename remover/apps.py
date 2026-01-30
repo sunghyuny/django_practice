@@ -9,7 +9,6 @@ class RemoverConfig(AppConfig):
     device = None
 
     def ready(self):
-        if 'runserver' in sys.argv:
-            from .ai_engine.model_loader import load_model as model_loader
-            
-            self.model , self.device = model_loader()
+        # Lazy Loading으로 변경하기 위해 ready에서는 로드하지 않음
+        pass
+
