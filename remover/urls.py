@@ -1,6 +1,6 @@
 from django.urls import path
-from . import views
+from .views import RemoveBackgroundView
 
 urlpatterns = [
-    path('', views.index, name='index'),
+    path('process/', RemoveBackgroundView.as_view(), name='process'),
 ]

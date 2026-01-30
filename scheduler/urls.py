@@ -1,16 +1,14 @@
-from django.contrib import admin
 from django.urls import path, include
-# ▼ 이 두 줄이 꼭 있어야 합니다!
-from django.conf import settings
-from django.conf.urls.static import static
+from rest_framework.routers import DefaultRouter
+from .views import GameViewSet, TaskViewSet, TaskLogViewSet, SpendingViewSet
 
-from scheduler.views import DashboardAPI, SpendingAPI, ToggleTaskAPI
+router = DefaultRouter()
+router.register(r'games', GameViewSet)
+router.register(r'tasks', TaskViewSet, basename='task')
 
-
-
+router.register(r'logs', TaskLogViewSet)
+router.register(r'spendings', SpendingViewSet)
 
 urlpatterns = [
-    path('api/dashboard/', DashboardAPI.as_view(), name='api_dashboard'),
-    path('api/toggle/<int:task_id>/', ToggleTaskAPI.as_view(), name='api_toggle'),
-    path('api/spending/', SpendingAPI.as_view(), name='api_spending'),
+    path('', include(router.urls)),
 ]

@@ -1,31 +1,73 @@
 /* src/App.css */
-body, #root {
+body,
+#root {
   margin: 0;
   padding: 0;
   background-color: #121212;
   color: #e0e0e0;
   font-family: 'Noto Sans KR', sans-serif;
-  
-  /* 핵심: 화면 전체 높이를 쓰고, 내용물을 정중앙에 배치 */
-  min-height: 100vh; /* 뷰포트 높이 100% */
+
+  /* 핵심: 화면 전체 높이를 쓰고, 내용물을 상단부터 배치 */
+  min-height: 100vh;
+  /* 뷰포트 높이 100% */
   display: flex;
-  justify-content: center; /* 가로 중앙 */
-  align-items: center;     /* 세로 중앙 */
+  justify-content: center;
+  /* 가로 중앙 */
+  align-items: flex-start;
+  /* 세로 상단 시작 (수직 중앙 정렬 해제) */
   width: 100%;
+  padding-top: 40px;
+  /* 상단 여백 추가 */
 }
+
 
 /* 2. 컨테이너 스타일 수정 */
 .container {
   max-width: 600px;
-  width: 100%; /* 모바일 등 좁은 화면에서는 꽉 차게 */
+  width: 100%;
+  /* 모바일 등 좁은 화면에서는 꽉 차게 */
   padding: 20px;
-  
+
   /* (선택사항) 컨테이너 자체에 배경색을 살짝 넣으면 더 깔끔해 보입니다 */
   background-color: #1a1a1a;
   border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.5); /* 그림자 효과 */
-  margin: 20px; /* 화면 너무 끝에 붙지 않게 여백 */
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  /* 그림자 효과 */
+  margin: 0 20px 40px 20px;
+  /* 하단 여백 추가 */
 }
+
+/* 대시보드 헤더 */
+.dashboard-header {
+  margin-bottom: 20px;
+  border-bottom: 2px solid #333;
+  padding-bottom: 10px;
+}
+
+.dashboard-header h2 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-badge {
+  font-size: 0.9rem;
+  background: #333;
+  padding: 4px 10px;
+  border-radius: 20px;
+  color: #00d2ff;
+}
+
+/* 차트 카드 */
+.chart-card {
+  background: #1e1e1e;
+  padding: 15px;
+  border-radius: 12px;
+  border: 1px solid #333;
+  margin-bottom: 30px;
+}
+
 
 /* --- 아래는 기존 코드 그대로 유지 --- */
 
@@ -49,8 +91,20 @@ body, #root {
   transition: 0.2s;
 }
 
-.tab-btn.active.ww { background: #00e5ff; color: #000; box-shadow: 0 0 10px #00e5ff44; } /* 명조 */
-.tab-btn.active.nikke { background: #ff3333; color: #fff; box-shadow: 0 0 10px #ff333344; } /* 니케 */
+.tab-btn.active.ww {
+  background: #00e5ff;
+  color: #000;
+  box-shadow: 0 0 10px #00e5ff44;
+}
+
+/* 명조 */
+.tab-btn.active.nikke {
+  background: #ff3333;
+  color: #fff;
+  box-shadow: 0 0 10px #ff333344;
+}
+
+/* 니케 */
 
 /* 가계부 요약 카드 */
 .spending-card {
@@ -61,8 +115,18 @@ body, #root {
   border: 1px solid #333;
   text-align: center;
 }
-.money-total { font-size: 2rem; font-weight: bold; color: #fff; margin: 10px 0; }
-.money-detail { font-size: 0.9rem; color: #aaa; }
+
+.money-total {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #fff;
+  margin: 10px 0;
+}
+
+.money-detail {
+  font-size: 0.9rem;
+  color: #aaa;
+}
 
 /* 숙제 리스트 */
 .section-title {
@@ -85,32 +149,76 @@ body, #root {
   border: 1px solid #2a2a2a;
   transition: 0.2s;
 }
-.task-item:hover { transform: translateY(-2px); border-color: #555; }
+
+.task-item:hover {
+  transform: translateY(-2px);
+  border-color: #555;
+}
 
 /* 완료된 상태 */
-.task-item.done { opacity: 0.5; }
-.task-item.done .task-title { text-decoration: line-through; }
+.task-item.done {
+  opacity: 0.5;
+}
 
-.task-info { display: flex; flex-direction: column; gap: 4px; }
-.task-title { font-weight: bold; font-size: 1.05rem; }
-.task-reward { font-size: 0.8rem; color: #888; }
+.task-item.done .task-title {
+  text-decoration: line-through;
+}
+
+.task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-title {
+  font-weight: bold;
+  font-size: 1.05rem;
+}
+
+.task-reward {
+  font-size: 0.8rem;
+  color: #888;
+}
 
 /* 뱃지들 */
-.badge { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
-.badge.d-day { background: #ff9800; color: #000; font-weight: bold; }
-.badge.weekly { background: #9c27b0; color: #fff; }
+.badge {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.badge.d-day {
+  background: #ff9800;
+  color: #000;
+  font-weight: bold;
+}
+
+.badge.weekly {
+  background: #9c27b0;
+  color: #fff;
+}
 
 /* 체크박스 버튼 */
 .check-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid #555;
   cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: transparent;
   background: transparent;
 }
-.check-btn.checked { background: #4caf50; border-color: #4caf50; color: #fff; }
+
+.check-btn.checked {
+  background: #4caf50;
+  border-color: #4caf50;
+  color: #fff;
+}
 
 .spending-form {
   margin-top: 15px;
@@ -129,11 +237,20 @@ body, #root {
   outline: none;
 }
 
-.spending-form input[type="text"] { flex: 2; }   /* 이름 입력창 길게 */
-.spending-form input[type="number"] { flex: 1; } /* 금액 입력창 짧게 */
+.spending-form input[type="text"] {
+  flex: 2;
+}
+
+/* 이름 입력창 길게 */
+.spending-form input[type="number"] {
+  flex: 1;
+}
+
+/* 금액 입력창 짧게 */
 
 .spending-form button {
-  background: #00d2ff; /* 명조색 */
+  background: #00d2ff;
+  /* 명조색 */
   color: #000;
   border: none;
   border-radius: 6px;
@@ -142,7 +259,10 @@ body, #root {
   cursor: pointer;
   transition: 0.2s;
 }
-.spending-form button:hover { opacity: 0.8; }
+
+.spending-form button:hover {
+  opacity: 0.8;
+}
 
 /* 엔드 콘텐츠가 없을 때 메시지 */
 .empty-msg {
@@ -176,23 +296,69 @@ body, #root {
   cursor: pointer;
   transition: 0.2s;
 }
-.task-item:hover { transform: translateY(-2px); border-color: #555; }
-.task-item.done { opacity: 0.5; }
-.task-item.done .task-title { text-decoration: line-through; }
 
-.task-info { display: flex; flex-direction: column; gap: 4px; }
-.task-title { font-weight: bold; font-size: 1.05rem; }
-.task-reward { font-size: 0.8rem; color: #888; }
+.task-item:hover {
+  transform: translateY(-2px);
+  border-color: #555;
+}
 
-.badge { font-size: 0.75rem; padding: 2px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
-.badge.d-day { background: #ff9800; color: #000; font-weight: bold; }
-.badge.weekly { background: #9c27b0; color: #fff; }
+.task-item.done {
+  opacity: 0.5;
+}
+
+.task-item.done .task-title {
+  text-decoration: line-through;
+}
+
+.task-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-title {
+  font-weight: bold;
+  font-size: 1.05rem;
+}
+
+.task-reward {
+  font-size: 0.8rem;
+  color: #888;
+}
+
+.badge {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.badge.d-day {
+  background: #ff9800;
+  color: #000;
+  font-weight: bold;
+}
+
+.badge.weekly {
+  background: #9c27b0;
+  color: #fff;
+}
 
 .check-btn {
-  width: 28px; height: 28px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 2px solid #555;
-  display: flex; align-items: center; justify-content: center;
-  color: transparent; transition: 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  transition: 0.2s;
 }
-.check-btn.checked { background: #4caf50; border-color: #4caf50; color: #fff; }
+
+.check-btn.checked {
+  background: #4caf50;
+  border-color: #4caf50;
+  color: #fff;
+}

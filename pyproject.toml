@@ -8,6 +8,7 @@ dependencies = [
     "django>=6.0.1",
     "django-cors-headers>=4.9.0",
     "djangorestframework>=3.16.1",
+    "djangorestframework-simplejwt>=5.5.1",
     "numpy>=2.4.1",
     "opencv-python>=4.13.0.90",
     "oracledb>=3.4.1",

@@ -24,4 +24,9 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         # 모델에 정의된 필드들 중 보여줄 것만 선택
-        fields = ('email', 'nickname', 'profile_image', 'intro', 'is_staff')
+        fields = ('email', 'nickname', 'is_staff')
+
+# 3. 로그인용 (이메일/비번만 받음)
+class LoginSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True)

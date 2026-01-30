@@ -18,7 +18,9 @@ class Task(models.Model):
         ('MONTHLY', '매월 1일'),
     ]
     game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='tasks')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True) # null이면 시스템 공통 숙제
     title = models.CharField(max_length=100)
+
     reset_type = models.CharField(max_length=20, choices=RESET_CHOICES, default='DAILY')
     reward = models.CharField(max_length=100, blank=True)
     priority = models.IntegerField(default=1)

@@ -1,139 +1,130 @@
-# scheduler/views.py
-from rest_framework.views import APIView
+from rest_framework import viewsets, permissions, status
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.utils import timezone
-from django.db.models import Sum # 합계 계산 함수
-from datetime import timedelta
-from .models import Task, TaskLog, Spending, Game
-from .serializers import TaskSerializer, SpendingSerializer
 
-# 1. 숙제 대시보드 API
-from rest_framework.permissions import IsAuthenticated, AllowAny # AllowAny 추가
-from django.contrib.auth.models import User # User 추가
+from .models import Game, Task, TaskLog, Spending
+from .serializers import GameSerializer, TaskSerializer, TaskLogSerializer, SpendingSerializer
+from .ai_advisor import generate_spending_warning
+from django.db.models import Sum, Q 
+from datetime import date, timedelta
 
-class DashboardAPI(APIView):
-    # ★ 1. 누구나 접속 허용 (로그인 체크 끔)
-    permission_classes = [AllowAny]
 
-    def get(self, request):
-        # ★ 2. 로그인 안 했으면? -> 강제로 첫 번째 유저(관리자)라고 가정함
-        if request.user.is_authenticated:
-            user = request.user
-        else:
-            user = User.objects.first() # DB에 있는 1번 유저(admin) 소환
+class GameViewSet(viewsets.ModelViewSet):
+    queryset = Game.objects.all()
+    serializer_class = GameSerializer
 
-        # --- 아래 로직은 기존과 동일 ---
+class TaskViewSet(viewsets.ModelViewSet):
+    serializer_class = TaskSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_authenticated:
+            # 시스템 공통 숙제 + 내 숙제
+            return Task.objects.filter(Q(user__isnull=True) | Q(user=user))
+
+        return Task.objects.filter(user__isnull=True)
+
+    def perform_create(self, serializer):
+        # 유저가 만드는 숙제는 자동으로 본인 소유
+        serializer.save(user=self.request.user)
+
+
+class TaskLogViewSet(viewsets.ModelViewSet):
+    queryset = TaskLog.objects.all()
+    serializer_class = TaskLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+class SpendingViewSet(viewsets.ModelViewSet):
+    queryset = Spending.objects.all()
+    serializer_class = SpendingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        # 1. 기본 저장 로직 실행
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
         
-        # 1. 모든 숙제 가져오기
-        tasks = Task.objects.all().order_by('-priority', 'reset_type')
-        serializer = TaskSerializer(tasks, many=True)
-        
-        # 2. 날짜 필터링 로직
-        now = timezone.now()
-        today = now.date()
-        start_of_week = today - timedelta(days=today.weekday())
+        headers = self.get_success_headers(serializer.data)
+        response_data = serializer.data
 
-        daily_done = TaskLog.objects.filter(
-            user=user, task__reset_type='DAILY', completed_at__date=today
-        ).values_list('task_id', flat=True)
-        
-        weekly_done = TaskLog.objects.filter(
-            user=user, task__reset_type='WEEKLY', completed_at__date__gte=start_of_week
-        ).values_list('task_id', flat=True)
-        
-        season_done = TaskLog.objects.filter(
-            user=user, task__reset_type__in=['BIWEEKLY', 'FOUR_WEEKS', 'PATCH', 'MONTHLY']
-        ).values_list('task_id', flat=True)
-
-        done_ids = list(daily_done) + list(weekly_done) + list(season_done)
-
-        return Response({
-            "tasks": serializer.data,
-            "done_ids": list(set(done_ids))
-        })
-
-# 2. 숙제 토글 API
-class ToggleTaskAPI(APIView):
-    permission_classes = [AllowAny]
-    
-    def post(self, request, task_id):
-        try:
-            task = Task.objects.get(id=task_id)
-        except Task.DoesNotExist:
-            return Response({"error": "No Task"}, status=404)
-            
+        # 2. [Smart Alert Logic] 지출 분석 및 AI 경고 생성
         user = request.user
-        today = timezone.now().date()
+        game_id = serializer.validated_data['game'].id
+        amount = serializer.validated_data['amount']
         
-        if task.reset_type == 'DAILY':
-            log = TaskLog.objects.filter(user=user, task=task, completed_at__date=today).last()
-        else:
-            log = TaskLog.objects.filter(user=user, task=task).last()
-            
-        if log:
-            log.delete()
-            return Response({"status": "unchecked"})
-        else:
-            TaskLog.objects.create(user=user, task=task)
-            return Response({"status": "checked"})
-
-# 3. ★ 가계부 API (통계 + 리스트)
-
-class SpendingAPI(APIView):
-    permission_classes = [AllowAny]
-
-    def get(self, request):
-        if request.user.is_authenticated:
-            user = request.user
-        else:
-            user = User.objects.first()
         
-        now = timezone.now()
-        
-        # 1. 쿼리셋 준비 (아직 DB 안 때림)
-        history_qs = Spending.objects.filter(user=user).order_by('-purchased_at')
-        
-        # 2. 이번 달 데이터 (Total 계산용)
-        # 쿼리 최적화: 필요한 필드(amount, game__name)만 가져와서 계산
-        this_month_qs = history_qs.filter(purchased_at__year=now.year, purchased_at__month=now.month)
-        
-        total_amount = this_month_qs.aggregate(Sum('amount'))['amount__sum'] or 0
-        ww_sum = this_month_qs.filter(game__name='명조').aggregate(Sum('amount'))['amount__sum'] or 0
-        nikke_sum = this_month_qs.filter(game__name='니케').aggregate(Sum('amount'))['amount__sum'] or 0
+        # 지난 2달간 해당 게임 평균 지출 계산 (로직 단순화로 인해 이번달 vs 지난달 비교로 대체)
 
-        # ★ 3. 리스트는 최근 20개만 자르기 (속도 핵심!)
-        # 전체 내역이 필요하면 슬라이싱([:20])을 하거나 Paginator를 써야 함
-        recent_history = history_qs[:20] 
-        serializer = SpendingSerializer(recent_history, many=True)
 
-        category_list = [
-            {"code": key, "name": value} 
-            for key, value in Spending.CATEGORY_CHOICES
-        ]
+        # 간단하게 '이번 달' vs '지난 달' 비교로 변경 (질문 의도 반영)
+        # 실제로는 복잡한 쿼리가 필요할 수 있으나, 여기선 간단히 구현
+        
+        # 이번 달 총액
+        today = date.today()
+
+        this_month_start = today.replace(day=1)
+        current_month_total = Spending.objects.filter(
+            user=user,
+            purchased_at__gte=this_month_start
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        # 지난 달 총액
+        last_month_end = this_month_start - timedelta(days=1)
+        last_month_start = last_month_end.replace(day=1)
+        last_month_total = Spending.objects.filter(
+            user=user,
+            purchased_at__gte=last_month_start,
+            purchased_at__lte=last_month_end
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        # 경고 조건: 이번 달 지출이 지난 달 지출을 벌써 넘어섰거나, 특정 금액 이상일 때
+        # 여기서는 '지난 달 보다 많이 썼을 때'로 설정
+        warning_msg = None
+        if last_month_total > 0 and current_month_total > last_month_total:
+             warning_msg = generate_spending_warning(
+                 user.nickname, 
+                 serializer.validated_data['game'].name,
+                 current_month_total,
+                 last_month_total
+             )
+        
+        if warning_msg:
+            response_data['warning_message'] = warning_msg
+
+        if warning_msg:
+            response_data['warning_message'] = warning_msg
+
+        return Response(response_data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @action(detail=False, methods=['get'])
+    def monthly_summary(self, request):
+        user = request.user
+        today = date.today()
+        this_month_start = today.replace(day=1)
+        
+        # 이번 달 지출 전체
+        spendings = Spending.objects.filter(user=user, purchased_at__gte=this_month_start)
+        
+        # 전체 합계
+        total_amount = spendings.aggregate(total=Sum('amount'))['total'] or 0
+        
+        # 게임별 합계 (ID 1: 명조, 2: 니케)
+        # 실제로는 Game 모델을 조회하거나 group by를 써야하지만, 요구사항에 맞춰 하드코딩된 키(ww, nikke) 사용
+        ww_total = spendings.filter(game_id=1).aggregate(t=Sum('amount'))['t'] or 0
+        nikke_total = spendings.filter(game_id=2).aggregate(t=Sum('amount'))['t'] or 0
+        
         return Response({
-            "summary": {
-                "month": now.month,
-                "total": total_amount,
-                "breakdown": {"ww": ww_sum, "nikke": nikke_sum}
-                
-            },
-            "history": serializer.data, # 이제 20개만 가니까 엄청 빠름
-            "categories": category_list
+            "total": total_amount,
+            "breakdown": {
+                "ww": ww_total,
+                "nikke": nikke_total
+            }
         })
-    
-    def post(self, request):
-        """
-        [POST] 지출 내역 추가
-        """
-        serializer = SpendingSerializer(data=request.data)
-        if serializer.is_valid():
-            # ★ 3. 로그인 안 했으면 관리자 계정으로 저장
-            if request.user.is_authenticated:
-                target_user = request.user
-            else:
-                target_user = User.objects.first()
-            
-            serializer.save(user=target_user)
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
