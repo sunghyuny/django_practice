@@ -13,12 +13,7 @@ ChartJS.register(
     Title, Tooltip, Legend, ArcElement, PointElement, LineElement, Filler
 );
 
-
-// DB의 Game ID와 매핑 (명조:1, 니케:2)
-const GAME_IDS = {
-    '명조': 1,
-    '니케': 2
-};
+const GAME_IDS = { '명조': 1, '니케': 2 };
 
 const DEFAULT_CATEGORIES = [
     { code: 'MONTHLY', name: '월정액' },
@@ -33,391 +28,285 @@ function Dashboard() {
     const [doneIds, setDoneIds] = useState([])
     const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
     const [activeTab, setActiveTab] = useState('명조')
-
-    // 지출 상태
     const [spending, setSpending] = useState({ total: 0, breakdown: { ww: 0, nikke: 0 }, category_breakdown: {} });
     const [spendingTrend, setSpendingTrend] = useState([]);
-
-    // 입력 폼 상태 (지출)
     const [newAmount, setNewAmount] = useState('');
     const [newCategory, setNewCategory] = useState('MONTHLY');
-
-    // 입력 폼 상태 (숙제/루틴)
-    const [showTaskForm, setShowTaskForm] = useState(false);
-    const [newTaskTitle, setNewTaskTitle] = useState('');
-    const [newTaskType, setNewTaskType] = useState('DAILY');
-
-    // 입력 폼 상태 (엔드 콘텐츠)
     const [showSeasonForm, setShowSeasonForm] = useState(false);
     const [newSeasonTitle, setNewSeasonTitle] = useState('');
     const [newSeasonType, setNewSeasonType] = useState('FOUR_WEEKS');
     const [newSeasonDueDate, setNewSeasonDueDate] = useState('');
+    const [gachaProfile, setGachaProfile] = useState(null);
 
-
-    useEffect(() => {
-        fetchData();
-    }, []);
-
+    useEffect(() => { fetchData(); }, []);
 
     const fetchData = async () => {
         try {
-            const [taskRes, spendSummaryRes, trendRes, statusRes] = await Promise.all([
+            const [taskRes, spendSummaryRes, trendRes, statusRes, gachaRes] = await Promise.all([
                 axios.get('/scheduler/tasks/'),
                 axios.get('/scheduler/spendings/monthly_summary/'),
                 axios.get('/scheduler/spendings/spending_trend/'),
                 axios.get('/scheduler/tasks/today_status/'),
+                axios.get('/scheduler/gacha-profiles/').catch(() => ({ data: [] })),
             ]);
-
             setTasks(Array.isArray(taskRes.data) ? taskRes.data : taskRes.data.results);
             setSpending(spendSummaryRes.data);
             setSpendingTrend(trendRes.data || []);
-
-            // 서버에서 받은 오늘 완료 상태 적용
-            const doneTaskIds = (statusRes.data || [])
-                .filter(s => s.is_done)
-                .map(s => s.task_id);
+            const doneTaskIds = (statusRes.data || []).filter(s => s.is_done).map(s => s.task_id);
             setDoneIds(doneTaskIds);
-
+            const profiles = Array.isArray(gachaRes.data) ? gachaRes.data : gachaRes.data.results || [];
+            setGachaProfile(profiles.find(p => p.game_name === '명조') || null);
         } catch (error) {
             console.error("로딩 실패:", error);
         }
     }
 
-
     const handleToggle = async (taskId) => {
         if (doneIds.includes(taskId)) {
             setDoneIds(doneIds.filter(id => id !== taskId));
         } else {
-            // 낙관적 업데이트: UI 먼저 반영
             setDoneIds([...doneIds, taskId]);
-            try {
-                await axios.post('/scheduler/logs/', { task: taskId });
-            } catch (e) {
-                // 실패 시 롤백
-                setDoneIds(prev => prev.filter(id => id !== taskId));
-                console.error("완료 처리 실패:", e);
-            }
+            try { await axios.post('/scheduler/logs/', { task: taskId }); }
+            catch (e) { setDoneIds(prev => prev.filter(id => id !== taskId)); }
         }
     }
 
     const handleAddSpending = async () => {
         if (!newAmount) return alert("금액을 입력해주세요!");
-
         const amountNum = parseInt(newAmount);
         const gameId = GAME_IDS[activeTab];
-        const selectedCategoryObj = categories.find(cat => cat.code === newCategory);
-        const autoItemName = selectedCategoryObj ? selectedCategoryObj.name : '기타';
-
-        // 낙관적 업데이트: UI 즉시 반영
+        const selectedCat = categories.find(cat => cat.code === newCategory);
         const key = activeTab === '명조' ? 'ww' : 'nikke';
-        setSpending(prev => ({
-            ...prev,
-            total: prev.total + amountNum,
-            breakdown: { ...prev.breakdown, [key]: prev.breakdown[key] + amountNum }
-        }));
+        setSpending(prev => ({ ...prev, total: prev.total + amountNum, breakdown: { ...prev.breakdown, [key]: prev.breakdown[key] + amountNum } }));
         setNewAmount('');
-
-        // 백그라운드 API 호출
         try {
-            await axios.post('/scheduler/spendings/', {
-                item_name: autoItemName,
-                amount: amountNum,
-                game: gameId,
-                purchased_at: new Date().toISOString().split('T')[0],
-                category: newCategory
-            });
-            fetchData(); // 정확한 데이터로 동기화
-
-        } catch (error) {
-            console.error("지출 등록 실패:", error);
-            // 실패 시 롤백
-            setSpending(prev => ({
-                ...prev,
-                total: prev.total - amountNum,
-                breakdown: { ...prev.breakdown, [key]: prev.breakdown[key] - amountNum }
-            }));
-            alert("오류 발생!");
-        }
-    }
-
-
-    const handleAddTask = async () => {
-        if (!newTaskTitle) return alert("숙제 이름을 입력해주세요.");
-        const gameId = GAME_IDS[activeTab];
-
-        try {
-            await axios.post('/scheduler/tasks/', {
-                title: newTaskTitle,
-                game: gameId,
-                reset_type: newTaskType,
-                priority: 1
-            });
-            alert("새로운 루틴이 추가되었습니다!");
-            setNewTaskTitle('');
-            setShowTaskForm(false);
+            await axios.post('/scheduler/spendings/', { item_name: selectedCat?.name || '기타', amount: amountNum, game: gameId, purchased_at: new Date().toISOString().split('T')[0], category: newCategory });
             fetchData();
         } catch (error) {
-            console.error("루틴 추가 실패:", error);
-            alert("루틴 추가 중 문제가 발생했습니다.");
+            setSpending(prev => ({ ...prev, total: prev.total - amountNum, breakdown: { ...prev.breakdown, [key]: prev.breakdown[key] - amountNum } }));
+            alert("오류 발생!");
         }
     }
 
     const handleAddSeasonTask = async () => {
         if (!newSeasonTitle) return alert("콘텐츠 이름을 입력해주세요.");
-        const gameId = GAME_IDS[activeTab];
-
         try {
-            await axios.post('/scheduler/tasks/', {
-                title: newSeasonTitle,
-                game: gameId,
-                reset_type: newSeasonType,
-                due_date: newSeasonDueDate || null,
-                priority: 1
-            });
-            setNewSeasonTitle('');
-            setNewSeasonDueDate('');
-            setShowSeasonForm(false);
-            fetchData();
-        } catch (error) {
-            console.error("시즌 일정 추가 실패:", error);
-            alert("일정 추가 중 문제가 발생했습니다.");
-        }
+            await axios.post('/scheduler/tasks/', { title: newSeasonTitle, game: GAME_IDS[activeTab], reset_type: newSeasonType, due_date: newSeasonDueDate || null, priority: 1 });
+            setNewSeasonTitle(''); setNewSeasonDueDate(''); setShowSeasonForm(false); fetchData();
+        } catch (error) { alert("일정 추가 중 문제가 발생했습니다."); }
     }
 
     const filteredTasks = tasks.filter(task => task.game_name === activeTab);
-
     const seasonTasks = filteredTasks.filter(t => ['FOUR_WEEKS', 'PATCH', 'BIWEEKLY', 'MONTHLY'].includes(t.reset_type));
-    const routineTasks = filteredTasks.filter(t => ['DAILY', 'WEEKLY'].includes(t.reset_type));
-
     const user = JSON.parse(localStorage.getItem('user_info') || '{}');
 
-    // 숙제 달성률 계산
-    const totalTasks = filteredTasks.length;
-    const doneTasks = filteredTasks.filter(t => doneIds.includes(t.id)).length;
-    const donePercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+    // ★ 명조 버전 날짜 계산
+    const getWuwaVersionInfo = () => {
+        const now = new Date();
+        const anchorUTC = Date.UTC(2026, 1, 5);
+        const todayUTC = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+        const diffDays = Math.floor((todayUTC - anchorUTC) / (1000 * 60 * 60 * 24));
+        let cycleDay = (diffDays % 42) + 1;
+        if (cycleDay <= 0) cycleDay += 42;
+        let vMinor = 1 + Math.floor(diffDays / 42);
+        let vMajor = 3 + Math.floor(vMinor / 10);
+        vMinor = vMinor % 10;
+        const version = `${vMajor}.${vMinor}`;
+        let half, pickupDay, pickupRemaining, nextPhaseLabel;
+        if (cycleDay <= 21) {
+            half = '전반'; pickupDay = cycleDay === 1 ? 0 : cycleDay - 1; pickupRemaining = 21 - cycleDay; nextPhaseLabel = `${version} 후반`;
+        } else {
+            half = '후반'; pickupDay = cycleDay === 22 ? 0 : cycleDay - 22; pickupRemaining = 42 - cycleDay; nextPhaseLabel = `${vMajor}.${vMinor + 1 > 9 ? 0 : vMinor + 1} 전반`;
+        }
+        return { version, half, cycleDay, pickupDay, pickupRemaining, nextPhaseLabel };
+    };
+    const wuwaInfo = getWuwaVersionInfo();
 
-    // ★ Feature 1: 게임별 지출 Bar 차트
-    const barChartData = {
-        labels: ['명조', '니케'],
-        datasets: [{
-            label: '이번 달 지출',
-            data: [spending.breakdown.ww, spending.breakdown.nikke],
-            backgroundColor: ['#00e5ff', '#ff3333'],
-            borderRadius: 5,
-        }],
-    };
-    const barChartOptions = {
-        responsive: true,
-        plugins: { legend: { display: false }, title: { display: true, text: '게임별 지출 현황', color: '#888' } },
-        scales: { y: { beginAtZero: true, grid: { color: '#333' }, ticks: { color: '#888' } }, x: { grid: { display: false }, ticks: { color: '#888' } } },
+    // ★ 가챠 견적 계산 (GachaPlanner의 목표 버전 설정 반영)
+    const getGachaEstimate = () => {
+        if (!gachaProfile) return null;
+        const cur = gachaProfile.currency || 0, tix = gachaProfile.tickets || 0, pity = gachaProfile.pity_stack || 0, guaranteed = gachaProfile.is_guaranteed;
+        // GachaPlanner에서 저장한 목표 버전(반버전 단위) 읽기
+        const targetHalves = parseInt(localStorage.getItem('ww_target_halves') || '0');
+        const futureIncome = targetHalves * 10000; // 반버전당 10,000
+        const totalCur = cur + futureIncome;
+
+        let neededPulls = 80 - pity;
+        if (!guaranteed) neededPulls += 80;
+        const ticketSaves = Math.min(tix, neededPulls);
+        const totalNeeded = Math.max(0, (neededPulls - ticketSaves) * 160);
+        const shortfall = Math.max(0, totalNeeded - totalCur);
+        const trucks = shortfall > 0 ? Math.ceil(shortfall / 8080) : 0;
+        return { neededPulls, shortfall, trucks, cost: trucks * 119000, currency: cur, futureIncome, totalCur, tickets: tix, pity, guaranteed, targetHalves };
     };
 
-    // ★ Feature 1: 숙제 달성률 도넛 차트
-    const doughnutData = {
-        labels: ['완료', '미완료'],
-        datasets: [{
-            data: [doneTasks, totalTasks - doneTasks],
-            backgroundColor: ['#4caf50', '#333'],
-            borderWidth: 0,
-            cutout: '75%',
-        }],
-    };
-    const doughnutOptions = {
-        responsive: true,
-        plugins: { legend: { display: false } },
-    };
+    const gachaEstimate = getGachaEstimate();
 
-    // ★ Feature 1: 카테고리별 지출 도넛 차트
+    // ★ 목표 픽업 레이블 계산
+    const getTargetPickupLabel = () => {
+        if (!wuwaInfo) return null;
+        const th = parseInt(localStorage.getItem('ww_target_halves') || '0');
+        if (th === 0) return `${wuwaInfo.version} ${wuwaInfo.half} (현재 픽업)`;
+        let { vMajor, vMinor, half } = (() => {
+            // wuwaInfo에서 현재 major/minor 추출
+            const [maj, min] = wuwaInfo.version.split('.').map(Number);
+            return { vMajor: maj, vMinor: min, half: wuwaInfo.half };
+        })();
+        let h = half === '전반' ? 0 : 1;
+        for (let i = 0; i < th; i++) {
+            h++;
+            if (h >= 2) { h = 0; vMinor++; }
+            if (vMinor >= 10) { vMinor = 0; vMajor++; }
+        }
+        const targetHalf = h === 0 ? '전반' : '후반';
+        return `${vMajor}.${vMinor} ${targetHalf}`;
+    };
+    const targetPickupLabel = getTargetPickupLabel();
+
+    // 차트 데이터
+    const barData = { labels: ['명조', '니케'], datasets: [{ label: '지출', data: [spending.breakdown.ww, spending.breakdown.nikke], backgroundColor: ['#00e5ff', '#ff3333'], borderRadius: 5 }] };
+    const barOpts = { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, title: { display: true, text: '게임별', color: '#888', font: { size: 11 } } }, scales: { y: { beginAtZero: true, grid: { color: '#333' }, ticks: { color: '#888', font: { size: 9 } } }, x: { grid: { display: false }, ticks: { color: '#888', font: { size: 9 } } } } };
+
     const catBreakdown = spending.category_breakdown || {};
     const catLabels = Object.values(catBreakdown).map(c => c.name);
     const catValues = Object.values(catBreakdown).map(c => c.total);
-    const catColors = ['#ff6384', '#36a2eb', '#ffce56', '#9966ff'];
+    const catDoughnut = { labels: catLabels.length ? catLabels : ['없음'], datasets: [{ data: catValues.length ? catValues : [1], backgroundColor: catValues.length ? ['#ff6384', '#36a2eb', '#ffce56', '#9966ff'] : ['#333'], borderWidth: 0 }] };
 
-    const categoryDoughnutData = {
-        labels: catLabels.length ? catLabels : ['데이터 없음'],
-        datasets: [{
-            data: catValues.length ? catValues : [1],
-            backgroundColor: catValues.length ? catColors : ['#333'],
-            borderWidth: 0,
-        }],
-    };
-
-    // ★ Feature 1: 월별 지출 추이 라인 차트
     const trendLabels = spendingTrend.map(m => m.label);
     const trendValues = spendingTrend.map(m => m.total);
-    const lineChartData = {
-        labels: trendLabels,
-        datasets: [{
-            label: '월별 지출',
-            data: trendValues,
-            borderColor: '#00d2ff',
-            backgroundColor: 'rgba(0, 210, 255, 0.1)',
-            fill: true,
-            tension: 0.4,
-            pointBackgroundColor: '#00d2ff',
-        }],
-    };
-    const lineChartOptions = {
-        responsive: true,
-        plugins: { legend: { display: false }, title: { display: true, text: '최근 6개월 지출 추이', color: '#888' } },
-        scales: { y: { beginAtZero: true, grid: { color: '#222' }, ticks: { color: '#888' } }, x: { grid: { display: false }, ticks: { color: '#888' } } },
-    };
+    const lineData = { labels: trendLabels, datasets: [{ label: '월별', data: trendValues, borderColor: '#00d2ff', backgroundColor: 'rgba(0,210,255,0.1)', fill: true, tension: 0.4, pointBackgroundColor: '#00d2ff', pointRadius: 2 }] };
+    const lineOpts = { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, title: { display: true, text: '6개월 추이', color: '#888', font: { size: 11 } } }, scales: { y: { beginAtZero: true, grid: { color: '#222' }, ticks: { color: '#888', font: { size: 9 } } }, x: { grid: { display: false }, ticks: { color: '#888', font: { size: 9 } } } } };
+
+    const cs = { card: { background: '#1a1a2e', border: '1px solid #333', borderRadius: '10px', padding: '20px', minHeight: '140px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' } };
 
     return (
-        <div className="container dashboard-container">
-            <div className="dashboard-header">
-                <h2>📊 Dashboard <span className="user-badge">{user.nickname || '게이머'}님</span></h2>
-            </div>
-
-            <div className="tabs">
-                <button className={`tab-btn ww ${activeTab === '명조' ? 'active' : ''}`} onClick={() => setActiveTab('명조')}>🌊 명조</button>
-                <button className={`tab-btn nikke ${activeTab === '니케' ? 'active' : ''}`} onClick={() => setActiveTab('니케')}>🍑 니케</button>
-            </div>
-
-            <div className="spending-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                    <div className="money-detail">이번 달 {activeTab} 지출</div>
-                    <button onClick={() => navigate('/history')} style={{ background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
-                        내역 관리 &gt;
-                    </button>
-                </div>
-                <div className="money-total">
-                    {activeTab === '명조'
-                        ? spending.breakdown.ww.toLocaleString()
-                        : spending.breakdown.nikke.toLocaleString()}원
-                </div>
-
-                <div className="spending-form">
-                    <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} className="category-select" style={{ flex: 1 }}>
-                        {categories.map((cat) => <option key={cat.code} value={cat.code}>{cat.name}</option>)}
-                    </select>
-                    <input type="number" placeholder="금액" value={newAmount} onChange={(e) => setNewAmount(e.target.value)} style={{ width: '100px' }} />
-                    <button onClick={handleAddSpending}>등록</button>
+        <div className="container dashboard-container" style={{ padding: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <h2 style={{ fontSize: '1.1rem', margin: 0 }}>📊 Dashboard <span className="user-badge">{user.nickname || '게이머'}님</span></h2>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                    <button className={`tab-btn ww ${activeTab === '명조' ? 'active' : ''}`} onClick={() => setActiveTab('명조')} style={{ padding: '4px 14px', fontSize: '0.8rem' }}>🌊 명조</button>
+                    <button className={`tab-btn nikke ${activeTab === '니케' ? 'active' : ''}`} onClick={() => setActiveTab('니케')} style={{ padding: '4px 14px', fontSize: '0.8rem' }}>🍑 니케</button>
                 </div>
             </div>
 
-            {/* ★ 차트 그리드 */}
-            <div className="chart-grid">
-                <div className="chart-card">
-                    <Bar options={barChartOptions} data={barChartData} />
-                </div>
-                <div className="chart-card doughnut-card">
-                    <div className="doughnut-label">숙제 달성률</div>
-                    <div className="doughnut-wrapper">
-                        <Doughnut data={doughnutData} options={doughnutOptions} />
-                        <div className="doughnut-center">{donePercent}%</div>
+            {/* ★ 1행: 픽업 + 견적 + 지출 가로 3열 */}
+            <div className="dash-grid-3">
+                {activeTab === '명조' && wuwaInfo && (
+                    <div style={{ ...cs.card, background: 'linear-gradient(135deg, rgba(255,177,66,0.08), rgba(0,210,255,0.08))', border: '1px solid rgba(255,177,66,0.25)' }}>
+                        <div style={{ color: '#ffb142', fontWeight: 'bold', fontSize: '1.1rem', marginBottom: '10px' }}>🌊 {wuwaInfo.version} {wuwaInfo.half}</div>
+                        <div style={{ fontSize: '1rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>진행</span><strong>{wuwaInfo.pickupDay === 0 ? '점검일' : `${wuwaInfo.pickupDay}일째`}</strong></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>남은</span><strong style={{ color: wuwaInfo.pickupRemaining <= 5 ? '#ff6b6b' : '#4ecdc4' }}>{wuwaInfo.pickupRemaining}일</strong></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>주기</span><strong>{wuwaInfo.cycleDay}/42</strong></div>
+                        </div>
+                        <div style={{ marginTop: '6px', background: '#1a1a2e', borderRadius: '4px', overflow: 'hidden', height: '4px' }}>
+                            <div style={{ width: `${(wuwaInfo.cycleDay / 42) * 100}%`, height: '100%', background: wuwaInfo.half === '전반' ? 'linear-gradient(90deg,#00d2ff,#3a7bd5)' : 'linear-gradient(90deg,#ffb142,#ff6b6b)', borderRadius: '4px' }} />
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === '명조' && (
+                    gachaEstimate ? (
+                        <div style={cs.card}>
+                            {/* 목표 픽업 표시 */}
+                            {targetPickupLabel && (
+                                <div style={{ fontSize: '0.75rem', color: '#ffb142', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    🎯 <span style={{ fontWeight: 'bold' }}>목표 픽업:</span> {targetPickupLabel}
+                                </div>
+                            )}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                <span style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>🎰 견적</span>
+                                <button onClick={() => navigate('/gacha')} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '0.7rem', textDecoration: 'underline' }}>상세&gt;</button>
+                            </div>
+                            <div style={{ fontSize: '0.78rem', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>보유</span>
+                                    <strong>{gachaEstimate.currency.toLocaleString()}
+                                        {gachaEstimate.futureIncome > 0 && <span style={{ color: '#4ecdc4', marginLeft: '4px' }}>+{gachaEstimate.futureIncome.toLocaleString()}</span>}
+                                    </strong>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span>필요</span><strong>{gachaEstimate.neededPulls}뽑 {gachaEstimate.guaranteed ? '확정' : '최악'}</strong></div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', color: gachaEstimate.shortfall > 0 ? '#ff6b6b' : '#4ecdc4' }}><span>부족</span><strong>{gachaEstimate.shortfall > 0 ? gachaEstimate.shortfall.toLocaleString() : '0 ✅'}</strong></div>
+                            </div>
+                            <div style={{ marginTop: '6px', borderRadius: '5px', padding: '3px 6px', fontSize: '0.72rem', textAlign: 'center', background: gachaEstimate.shortfall > 0 ? 'rgba(255,107,107,0.1)' : 'rgba(76,175,80,0.1)', color: gachaEstimate.shortfall > 0 ? '#ff6b6b' : '#4caf50' }}>
+                                {gachaEstimate.shortfall > 0 ? `🚚 ${gachaEstimate.trucks}트럭 (${gachaEstimate.cost.toLocaleString()}원)` : '🎉 무과금 확정!'}
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{ ...cs.card, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <button onClick={() => navigate('/gacha')} style={{ background: '#333', border: 'none', color: '#fff', padding: '8px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>🎰 설정하기</button>
+                        </div>
+                    )
+                )}
+
+                {/* 지출 */}
+                <div style={cs.card}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>💰 {activeTab} 이번 달</span>
+                        <button onClick={() => navigate('/history')} style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: '0.7rem', textDecoration: 'underline' }}>관리&gt;</button>
+                    </div>
+                    <div style={{ fontSize: '1.3rem', fontWeight: 'bold', textAlign: 'center', margin: '2px 0 6px' }}>
+                        {(activeTab === '명조' ? spending.breakdown.ww : spending.breakdown.nikke).toLocaleString()}원
+                    </div>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                        <select value={newCategory} onChange={(e) => setNewCategory(e.target.value)} style={{ flex: 1, background: '#2a2a2a', border: '1px solid #444', color: '#fff', padding: '5px', borderRadius: '4px', fontSize: '0.72rem' }}>
+                            {categories.map((cat) => <option key={cat.code} value={cat.code}>{cat.name}</option>)}
+                        </select>
+                        <input type="number" placeholder="금액" value={newAmount} onChange={(e) => setNewAmount(e.target.value)} style={{ width: '55px', background: '#2a2a2a', border: '1px solid #444', color: '#fff', padding: '5px', borderRadius: '4px', fontSize: '0.72rem' }} />
+                        <button onClick={handleAddSpending} style={{ background: '#00e5ff', color: '#000', border: 'none', borderRadius: '4px', padding: '5px 8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.72rem' }}>등록</button>
                     </div>
                 </div>
             </div>
 
-            <div className="chart-grid">
-                <div className="chart-card">
-                    <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px', textAlign: 'center' }}>카테고리별 지출</div>
-                    <Doughnut data={categoryDoughnutData} options={{ responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#888', font: { size: 11 } } } } }} />
+            {/* ★ 2행: 차트 3열 */}
+            <div className="dash-grid-3" style={{ marginBottom: '20px' }}>
+                <div className="chart-card" style={{ padding: '20px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Bar options={{ ...barOpts, maintainAspectRatio: false }} data={barData} />
                 </div>
-                <div className="chart-card">
-                    <Line options={lineChartOptions} data={lineChartData} />
+                <div className="chart-card" style={{ padding: '20px', height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#888', textAlign: 'center', marginBottom: '10px' }}>카테고리별</div>
+                    <Doughnut data={catDoughnut} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#888', font: { size: 12 }, boxWidth: 12 } } } }} />
+                </div>
+                <div className="chart-card" style={{ padding: '20px', height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Line options={{ ...lineOpts, maintainAspectRatio: false }} data={lineData} />
                 </div>
             </div>
 
-
-            <div className="task-section">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '10px' }}>
-                    <div className="section-title" style={{ margin: 0, border: 'none' }}>🔥 엔드 콘텐츠 (Season)</div>
-                    <button onClick={() => setShowSeasonForm(!showSeasonForm)} style={{ background: '#333', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer' }}>
-                        {showSeasonForm ? '닫기' : '+ 일정 추가'}
+            {/* ★ 3행: 엔드 콘텐츠 */}
+            <div style={{ marginTop: '2px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #333', paddingBottom: '6px', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>🔥 엔드 콘텐츠</span>
+                    <button onClick={() => setShowSeasonForm(!showSeasonForm)} style={{ background: '#333', color: '#fff', border: 'none', borderRadius: '4px', padding: '2px 8px', cursor: 'pointer', fontSize: '0.75rem' }}>
+                        {showSeasonForm ? '닫기' : '+ 추가'}
                     </button>
                 </div>
 
                 {showSeasonForm && (
-                    <div className="routine-form" style={{ marginBottom: '15px', background: '#222', padding: '10px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <input
-                                type="text"
-                                placeholder="콘텐츠 이름 (예: 심연 콘텐츠)"
-                                value={newSeasonTitle}
-                                onChange={(e) => setNewSeasonTitle(e.target.value)}
-                                style={{ flex: 2, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
-                            />
-                            <select
-                                value={newSeasonType}
-                                onChange={(e) => setNewSeasonType(e.target.value)}
-                                style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
-                            >
-                                <option value="FOUR_WEEKS">4주 (시즌)</option>
-                                <option value="PATCH">패치 (6주)</option>
-                                <option value="BIWEEKLY">격주 (2주)</option>
-                                <option value="MONTHLY">매월</option>
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <input
-                                type="date"
-                                value={newSeasonDueDate}
-                                onChange={(e) => setNewSeasonDueDate(e.target.value)}
-                                style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
-                                placeholder="마감일"
-                            />
-                            <button onClick={handleAddSeasonTask} style={{ background: '#ff9800', color: '#000', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>
-                                추가
-                            </button>
-                        </div>
+                    <div style={{ marginBottom: '8px', background: '#222', padding: '6px', borderRadius: '6px', display: 'flex', gap: '4px' }}>
+                        <input type="text" placeholder="이름" value={newSeasonTitle} onChange={(e) => setNewSeasonTitle(e.target.value)} style={{ flex: 2, padding: '5px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', fontSize: '0.78rem' }} />
+                        <select value={newSeasonType} onChange={(e) => setNewSeasonType(e.target.value)} style={{ padding: '5px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', fontSize: '0.78rem' }}>
+                            <option value="FOUR_WEEKS">4주</option><option value="PATCH">6주</option><option value="BIWEEKLY">격주</option><option value="MONTHLY">매월</option>
+                        </select>
+                        <input type="date" value={newSeasonDueDate} onChange={(e) => setNewSeasonDueDate(e.target.value)} style={{ padding: '5px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff', fontSize: '0.78rem' }} />
+                        <button onClick={handleAddSeasonTask} style={{ background: '#ff9800', color: '#000', border: 'none', borderRadius: '4px', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.78rem' }}>추가</button>
                     </div>
                 )}
 
-                {seasonTasks.length === 0 && <div className="empty-msg">등록된 시즌 콘텐츠가 없습니다.</div>}
+                {seasonTasks.length === 0 && <div style={{ textAlign: 'center', color: '#555', fontSize: '0.8rem', padding: '6px' }}>등록된 콘텐츠가 없습니다.</div>}
                 {seasonTasks.map(task => <TaskItem key={task.id} task={task} isDone={doneIds.includes(task.id)} onToggle={() => handleToggle(task.id)} />)}
             </div>
-
-            <div className="task-section">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px', borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '10px' }}>
-                    <div className="section-title" style={{ margin: 0, border: 'none' }}>📅 루틴 (Daily / Weekly)</div>
-                    <button onClick={() => setShowTaskForm(!showTaskForm)} style={{ background: '#333', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer' }}>
-                        {showTaskForm ? '닫기' : '+ 루틴 추가'}
-                    </button>
-                </div>
-
-                {showTaskForm && (
-                    <div className="routine-form" style={{ marginBottom: '15px', background: '#222', padding: '10px', borderRadius: '8px', display: 'flex', gap: '8px' }}>
-                        <input
-                            type="text"
-                            placeholder="할 일 이름 (예: 일일 의뢰)"
-                            value={newTaskTitle}
-                            onChange={(e) => setNewTaskTitle(e.target.value)}
-                            style={{ flex: 2, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
-                        />
-                        <select
-                            value={newTaskType}
-                            onChange={(e) => setNewTaskType(e.target.value)}
-                            style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
-                        >
-                            <option value="DAILY">매일 (Daily)</option>
-                            <option value="WEEKLY">주간 (Weekly)</option>
-                        </select>
-                        <button onClick={handleAddTask} style={{ background: '#4caf50', color: '#fff', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>
-                            추가
-                        </button>
-                    </div>
-                )}
-
-                {routineTasks.length === 0 && <div className="empty-msg">등록된 루틴이 없습니다.</div>}
-                {routineTasks.map(task => <TaskItem key={task.id} task={task} isDone={doneIds.includes(task.id)} onToggle={() => handleToggle(task.id)} />)}
-            </div>
-
-        </div >
+        </div>
     )
 }
 
 function TaskItem({ task, isDone, onToggle }) {
     return (
-        <div className={`task-item ${isDone ? 'done' : ''}`} onClick={onToggle}>
+        <div className={`task-item ${isDone ? 'done' : ''}`} onClick={onToggle} style={{ padding: '8px 10px' }}>
             <div className="task-info">
-                <div className="task-title">
+                <div className="task-title" style={{ fontSize: '0.85rem' }}>
                     {task.title}
                     {task.days_remaining !== null && <span className="badge d-day">D-{task.days_remaining}</span>}
-                    {task.reset_type === 'WEEKLY' && <span className="badge weekly">주간</span>}
                 </div>
-                <div className="task-reward">{task.reward}</div>
             </div>
             <div className={`check-btn ${isDone ? 'checked' : ''}`}>✔</div>
         </div>

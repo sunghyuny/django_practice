@@ -65,24 +65,6 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         return Response(result)
 
-    # ★ Feature 3: 스크린샷으로 숙제 완료
-    @action(detail=True, methods=['post'], parser_classes=[MultiPartParser, FormParser])
-    def complete_with_screenshot(self, request, pk=None):
-        """스크린샷을 첨부하여 숙제를 완료 처리"""
-        task = self.get_object()
-        screenshot = request.FILES.get('screenshot')
-
-        log = TaskLog.objects.create(
-            user=request.user,
-            task=task,
-            screenshot=screenshot
-        )
-
-        return Response({
-            'message': f'"{task.title}" 숙제가 완료 처리되었습니다!',
-            'log_id': log.id,
-        }, status=status.HTTP_201_CREATED)
-
     # ★ Feature 5: 디스코드 알림 전송
     @action(detail=False, methods=['post'])
     def send_reminder(self, request):
@@ -391,84 +373,44 @@ class GachaProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def calculate_plan(self, request):
+        """버전 단위 간소화된 견적 계산 (반버전당 10,000 수입)"""
         user = request.user
         game_id = request.query_params.get('game_id')
+        halves_ahead = int(request.query_params.get('halves_ahead', 0))
+
         if not game_id:
             return Response({'error': 'game_id required'}, status=status.HTTP_400_BAD_REQUEST)
-            
+
         try:
             profile = GachaProfile.objects.get(user=user, game_id=game_id)
         except GachaProfile.DoesNotExist:
             return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if not profile.target_date:
-            return Response({'error': '목표 날짜(D-Day)를 설정해주세요.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        today = date.today()
-        days_remaining = (profile.target_date - today).days
-        if days_remaining < 0:
-            days_remaining = 0
-
-        expected_income = 0
         game_name = profile.game.name
-        
-        if game_name == '명조':
-            # 1. 자연 획득량 계산
-            # 일일 퀘스트: 일 60
-            expected_income += days_remaining * 60
-            # 월정액: 일 90
-            if profile.has_monthly_pass:
-                expected_income += days_remaining * 90
-            # 역경의 탑 (1주기 14일)
-            tower_resets = days_remaining / 14.0
-            expected_income += int(tower_resets * profile.tower_avg_stars)
-            # 바닷속 폐허 (1주기 30일 가정)
-            ruins_resets = days_remaining / 30.0
-            expected_income += int(ruins_resets * profile.ruins_avg_reward)
 
-            # 2. 필요 총 재화 계산
+        if game_name == '명조':
+            # 버전당 약 20,000 (반버전당 10,000)
+            expected_income = halves_ahead * 10000
+
             needed_pulls = 80 - profile.pity_stack
             if not profile.is_guaranteed:
-                needed_pulls += 80  # 최악 반천장 가정 (총 160)
-            
-            # (필요 뽑기 수 - 보유 티켓) * 1뽑 가격 - 보유 재화
-            total_needed_currency = (needed_pulls - profile.tickets) * 160 - profile.currency
-            
-            # 3. 부족분 및 트럭 계산
-            shortfall = total_needed_currency - expected_income
-            if shortfall < 0:
-                shortfall = 0
+                needed_pulls += 80
 
-            # 1트럭 = 119,000원 = 기준 8080개 (명조 초회 제외 평균 가성비)
-            trucks_needed = int((shortfall + 8079) // 8080)
+            ticket_saves = min(profile.tickets, needed_pulls)
+            total_needed_currency = max(0, (needed_pulls - ticket_saves) * 160)
+
+            shortfall = max(0, total_needed_currency - profile.currency - expected_income)
+            trucks_needed = (shortfall + 8079) // 8080 if shortfall > 0 else 0
             cost_krw = trucks_needed * 119000
 
-        elif game_name == '니케':
-            # 니케 로직 (임시 단순계산: 하루 평균 100쥬얼 가정)
-            expected_income += days_remaining * 100
-            
-            # 니케 천장은 200 마일리지
-            needed_pulls = 200 - profile.pity_stack
-            if needed_pulls < 0:
-                needed_pulls = 0
-                
-            total_needed_currency = (needed_pulls - profile.tickets) * 300 - profile.currency
-            shortfall = total_needed_currency - expected_income
-            if shortfall < 0:
-                shortfall = 0
-
-            # 1트럭 = 119,000원 = 기준 8000개
-            trucks_needed = int((shortfall + 7999) // 8000)
-            cost_krw = trucks_needed * 119000
         else:
             return Response({'error': '지원하지 않는 게임입니다.'}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({
-            'days_remaining': days_remaining,
             'expected_income': expected_income,
-            'total_needed_currency': total_needed_currency if total_needed_currency > 0 else 0,
+            'total_needed_currency': total_needed_currency,
             'shortfall': shortfall,
             'trucks_needed': trucks_needed,
             'cost_krw': cost_krw,
-            'profile_id': profile.id
+            'needed_pulls': needed_pulls,
         })

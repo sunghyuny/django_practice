@@ -35,10 +35,9 @@ class Task(models.Model):
         return None
 
 class TaskLog(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, default=1)
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
     completed_at = models.DateTimeField(auto_now_add=True)
-    screenshot = models.ImageField(upload_to='screenshots/', blank=True, null=True)
 
 # ★ [NEW] 가계부 모델 완성본
 class Spending(models.Model):
@@ -49,7 +48,7 @@ class Spending(models.Model):
         ('SKIN', '스킨/코스튬'),
     ]
     
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, default=1)
     game = models.ForeignKey(Game, on_delete=models.CASCADE)
     
     item_name = models.CharField(max_length=100) # 예: 금희 스킨
@@ -64,7 +63,7 @@ class Spending(models.Model):
 
 # ★ [NEW] 저축 목표 (WishList / Piggy Bank)
 class SavingGoal(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, default=1)
     game = models.ForeignKey(Game, on_delete=models.CASCADE)
     item_name = models.CharField(max_length=100)       # 예: "신염의 율자 스킨"
     target_amount = models.IntegerField()               # 목표 금액 (원)
@@ -83,7 +82,7 @@ class SavingGoal(models.Model):
         return min(round((self.saved_amount / self.target_amount) * 100, 1), 100)
 
 class GachaProfile(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, default=1)
     game = models.ForeignKey(Game, on_delete=models.CASCADE)
     
     # 보유 재화

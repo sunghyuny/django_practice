@@ -62,8 +62,52 @@ function Calendar() {
         return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     };
 
+    const WUWA_CYCLE_EVENTS = {
+        1: [
+            { text: '업데이트 진행', style: { color: '#adb5bd', fontSize: '10px' } },
+            { text: '전반 튜닝 오픈', style: { color: '#ffb142', fontSize: '11px', fontWeight: 'bold' } },
+            { text: '선약 방송국 오픈', style: { color: '#ffb142', fontSize: '11px' } }
+        ],
+        7: [{ text: '신규 캐릭터 공개', style: { color: '#ffb142', fontSize: '11px' } }],
+        8: [{ text: '신규 캐릭터 공개', style: { color: '#ffb142', fontSize: '11px' } }],
+        9: [{ text: '신규 캐릭터 공개', style: { color: '#ffb142', fontSize: '11px' } }],
+        22: [
+            { text: '전반 튜닝 종료', style: { color: '#adb5bd', fontSize: '10px', textDecoration: 'line-through' } },
+            { text: '후반 튜닝 오픈', style: { color: '#ffb142', fontSize: '11px', fontWeight: 'bold' } },
+            { text: '후반 업데이트', style: { color: '#ffb142', fontSize: '11px' } }
+        ],
+        30: [{ text: '프리뷰 특별 방송', style: { color: '#ffb142', fontSize: '11px', fontWeight: 'bold' } }],
+        41: [{ text: '사전 다운로드 오픈', style: { color: '#ffb142', fontSize: '11px' } }],
+        42: [
+            { text: '후반 튜닝 종료', style: { color: '#adb5bd', fontSize: '10px', textDecoration: 'line-through' } },
+            { text: '선약 방송국 종료', style: { color: '#adb5bd', fontSize: '10px' } }
+        ]
+    };
+
+    const getWuwaSchedule = (dateStr) => {
+        if (!dateStr) return null;
+        const [y, m, d] = dateStr.split('-');
+        const targetUTC = Date.UTC(parseInt(y), parseInt(m) - 1, parseInt(d));
+        const anchorUTC = Date.UTC(2026, 1, 5); // 2026-02-05 (3.1 업데이트일 - 목요일)
+
+        const diffDays = Math.floor((targetUTC - anchorUTC) / (1000 * 60 * 60 * 24));
+
+        let cycleDay = (diffDays % 42) + 1;
+        if (cycleDay <= 0) cycleDay += 42;
+
+        let vMinor = 1 + Math.floor(diffDays / 42);
+        let vMajor = 3 + Math.floor(vMinor / 10);
+        vMinor = vMinor % 10;
+
+        const events = WUWA_CYCLE_EVENTS[cycleDay];
+        if (events) {
+            return { version: `${vMajor}.${vMinor}`, events, cycleDay };
+        }
+        return null;
+    };
+
     const getDayData = (day) => {
-        if (!day) return { taskCount: 0, spendTotal: 0 };
+        if (!day) return { taskCount: 0, spendTotal: 0, wuwaSchedule: null };
         const dateStr = getDateStr(day);
 
         const dayLogs = logs.filter(l => l.completed_at?.startsWith(dateStr));
@@ -75,6 +119,7 @@ function Calendar() {
             spendTotal,
             logs: dayLogs,
             spendings: daySpendings,
+            wuwaSchedule: getWuwaSchedule(dateStr)
         };
     };
 
@@ -168,11 +213,24 @@ function Calendar() {
                             key={idx}
                             className={`cal-cell ${day ? 'has-day' : ''} ${isToday ? 'today' : ''} ${selectedDay === day ? 'selected' : ''}`}
                             onClick={() => day && setSelectedDay(day === selectedDay ? null : day)}
+                            style={{ position: 'relative', minHeight: '90px' }}
                         >
                             {day && (
                                 <>
                                     <span className="cal-date">{day}</span>
-                                    <div className="cal-indicators">
+
+                                    {/* 명조 일정 오버레이 */}
+                                    {data.wuwaSchedule && (
+                                        <div className="wuwa-events-wrapper" style={{ marginTop: '20px', display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 4px' }}>
+                                            {data.wuwaSchedule.events.map((ev, i) => (
+                                                <span key={i} style={{ ...ev.style, display: 'block', lineHeight: '1.2', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {ev.text}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    <div className="cal-indicators" style={{ position: 'absolute', bottom: '4px', right: '4px' }}>
                                         {data.taskCount > 0 && <span className="cal-dot task-dot" title={`숙제 ${data.taskCount}개 완료`}>✔</span>}
                                         {data.spendTotal > 0 && <span className="cal-dot spend-dot" title={`${data.spendTotal.toLocaleString()}원`}>💸</span>}
                                     </div>
@@ -187,6 +245,19 @@ function Calendar() {
             {selectedData && (
                 <div className="cal-detail-panel">
                     <h3>{month + 1}월 {selectedDay}일 상세</h3>
+
+                    {/* 명조 상세 일정 표시 */}
+                    {selectedData.wuwaSchedule && (
+                        <div className="cal-detail-section" style={{ background: 'rgba(255, 177, 66, 0.1)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(255, 177, 66, 0.2)' }}>
+                            <h4 style={{ color: '#ffb142', margin: '0 0 8px 0' }}>🌊 명조 {selectedData.wuwaSchedule.version} 패치 주기 ({selectedData.wuwaSchedule.cycleDay}/42일차)</h4>
+                            {selectedData.wuwaSchedule.events.map((ev, i) => (
+                                <div key={i} className="cal-detail-item" style={{ color: ev.style.color, fontWeight: ev.style.fontWeight || 'normal' }}>
+                                    <span>{ev.text.replace('v', '')}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {selectedData.logs?.length > 0 && (
                         <div className="cal-detail-section">
                             <h4>✅ 완료한 숙제</h4>
@@ -209,7 +280,7 @@ function Calendar() {
                             ))}
                         </div>
                     )}
-                    {(!selectedData.logs?.length && !selectedData.spendings?.length) && (
+                    {(!selectedData.logs?.length && !selectedData.spendings?.length && !selectedData.wuwaSchedule) && (
                         <div className="empty-msg">이 날은 기록이 없습니다.</div>
                     )}
 
