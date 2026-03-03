@@ -34,6 +34,7 @@ class UserManager(BaseUserManager):
 class User(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(unique=True)     # 아이디로 사용
     nickname = models.CharField(max_length=20, unique=True)
+    discord_webhook_url = models.URLField(blank=True, default='')  # 디스코드 알림용
     
     # 필수 시스템 필드 (건드리지 마세요)
     is_active = models.BooleanField(default=True)

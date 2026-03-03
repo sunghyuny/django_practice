@@ -38,6 +38,7 @@ class TaskLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     task = models.ForeignKey(Task, on_delete=models.CASCADE)
     completed_at = models.DateTimeField(auto_now_add=True)
+    screenshot = models.ImageField(upload_to='screenshots/', blank=True, null=True)
 
 # ★ [NEW] 가계부 모델 완성본
 class Spending(models.Model):
@@ -59,3 +60,24 @@ class Spending(models.Model):
 
     def __str__(self):
         return f"[{self.game}] {self.item_name} ({self.amount}원)"
+
+
+# ★ [NEW] 저축 목표 (WishList / Piggy Bank)
+class SavingGoal(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE)
+    item_name = models.CharField(max_length=100)       # 예: "신염의 율자 스킨"
+    target_amount = models.IntegerField()               # 목표 금액 (원)
+    saved_amount = models.IntegerField(default=0)       # 현재 저축 금액
+    target_date = models.DateField(null=True, blank=True)  # 목표 날짜
+    is_achieved = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"[{self.game}] {self.item_name} ({self.saved_amount}/{self.target_amount}원)"
+
+    @property
+    def progress_percent(self):
+        if self.target_amount <= 0:
+            return 100
+        return min(round((self.saved_amount / self.target_amount) * 100, 1), 100)

@@ -1,11 +1,17 @@
 import { useState, useEffect } from 'react'
 import axios from '../api/axios'
-import { useNavigate } from 'react-router-dom'; // 네비게이션 추가
-import { Bar } from 'react-chartjs-2';
+import { useNavigate } from 'react-router-dom';
+import { Bar, Doughnut, Line } from 'react-chartjs-2';
 
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import {
+    Chart as ChartJS, CategoryScale, LinearScale, BarElement,
+    Title, Tooltip, Legend, ArcElement, PointElement, LineElement, Filler
+} from 'chart.js';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ChartJS.register(
+    CategoryScale, LinearScale, BarElement,
+    Title, Tooltip, Legend, ArcElement, PointElement, LineElement, Filler
+);
 
 
 // DB의 Game ID와 매핑 (명조:1, 니케:2)
@@ -24,16 +30,13 @@ const DEFAULT_CATEGORIES = [
 function Dashboard() {
     const navigate = useNavigate();
     const [tasks, setTasks] = useState([])
-
     const [doneIds, setDoneIds] = useState([])
-
-    // 지출 상태
-    const [spending, setSpending] = useState(() => {
-        const saved = localStorage.getItem('mySpendingData');
-        return saved ? JSON.parse(saved) : { total: 0, breakdown: { ww: 0, nikke: 0 } };
-    });
     const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
     const [activeTab, setActiveTab] = useState('명조')
+
+    // 지출 상태
+    const [spending, setSpending] = useState({ total: 0, breakdown: { ww: 0, nikke: 0 }, category_breakdown: {} });
+    const [spendingTrend, setSpendingTrend] = useState([]);
 
     // 입력 폼 상태 (지출)
     const [newAmount, setNewAmount] = useState('');
@@ -44,29 +47,36 @@ function Dashboard() {
     const [newTaskTitle, setNewTaskTitle] = useState('');
     const [newTaskType, setNewTaskType] = useState('DAILY');
 
+    // 입력 폼 상태 (엔드 콘텐츠)
+    const [showSeasonForm, setShowSeasonForm] = useState(false);
+    const [newSeasonTitle, setNewSeasonTitle] = useState('');
+    const [newSeasonType, setNewSeasonType] = useState('FOUR_WEEKS');
+    const [newSeasonDueDate, setNewSeasonDueDate] = useState('');
 
-    // 초기 데이터 로드
-    // 1. 초기 데이터 로드 (컴포넌트 마운트 시 1회만)
+
     useEffect(() => {
         fetchData();
     }, []);
 
-    // 2. Spending 상태 변경 시 로컬 스토리지 저장 (데이터 페칭과 분리)
-    useEffect(() => {
-        localStorage.setItem('mySpendingData', JSON.stringify(spending));
-    }, [spending]);
-
 
     const fetchData = async () => {
         try {
-            const [taskRes, spendSummaryRes] = await Promise.all([
+            const [taskRes, spendSummaryRes, trendRes, statusRes] = await Promise.all([
                 axios.get('/scheduler/tasks/'),
-                axios.get('/scheduler/spendings/monthly_summary/')
+                axios.get('/scheduler/spendings/monthly_summary/'),
+                axios.get('/scheduler/spendings/spending_trend/'),
+                axios.get('/scheduler/tasks/today_status/'),
             ]);
 
             setTasks(Array.isArray(taskRes.data) ? taskRes.data : taskRes.data.results);
             setSpending(spendSummaryRes.data);
+            setSpendingTrend(trendRes.data || []);
 
+            // 서버에서 받은 오늘 완료 상태 적용
+            const doneTaskIds = (statusRes.data || [])
+                .filter(s => s.is_done)
+                .map(s => s.task_id);
+            setDoneIds(doneTaskIds);
 
         } catch (error) {
             console.error("로딩 실패:", error);
@@ -75,13 +85,19 @@ function Dashboard() {
 
 
     const handleToggle = async (taskId) => {
-        // ... 기존 로직 (API 호출 경로 수정 필요)
         if (doneIds.includes(taskId)) {
             setDoneIds(doneIds.filter(id => id !== taskId));
         } else {
+            // 낙관적 업데이트: UI 먼저 반영
             setDoneIds([...doneIds, taskId]);
+            try {
+                await axios.post('/scheduler/logs/', { task: taskId });
+            } catch (e) {
+                // 실패 시 롤백
+                setDoneIds(prev => prev.filter(id => id !== taskId));
+                console.error("완료 처리 실패:", e);
+            }
         }
-        // API 호출 생략 (TaskLog 구현 필요)
     }
 
     const handleAddSpending = async () => {
@@ -92,6 +108,16 @@ function Dashboard() {
         const selectedCategoryObj = categories.find(cat => cat.code === newCategory);
         const autoItemName = selectedCategoryObj ? selectedCategoryObj.name : '기타';
 
+        // 낙관적 업데이트: UI 즉시 반영
+        const key = activeTab === '명조' ? 'ww' : 'nikke';
+        setSpending(prev => ({
+            ...prev,
+            total: prev.total + amountNum,
+            breakdown: { ...prev.breakdown, [key]: prev.breakdown[key] + amountNum }
+        }));
+        setNewAmount('');
+
+        // 백그라운드 API 호출
         try {
             await axios.post('/scheduler/spendings/', {
                 item_name: autoItemName,
@@ -100,12 +126,16 @@ function Dashboard() {
                 purchased_at: new Date().toISOString().split('T')[0],
                 category: newCategory
             });
-            // 성공 시 데이터 재로딩 또는 상태 업데이트
-            alert("지출이 등록되었습니다.");
-            fetchData(); // 재로딩
+            fetchData(); // 정확한 데이터로 동기화
 
         } catch (error) {
             console.error("지출 등록 실패:", error);
+            // 실패 시 롤백
+            setSpending(prev => ({
+                ...prev,
+                total: prev.total - amountNum,
+                breakdown: { ...prev.breakdown, [key]: prev.breakdown[key] - amountNum }
+            }));
             alert("오류 발생!");
         }
     }
@@ -120,7 +150,6 @@ function Dashboard() {
                 title: newTaskTitle,
                 game: gameId,
                 reset_type: newTaskType,
-                // user 필드는 백엔드에서 자동 처리
                 priority: 1
             });
             alert("새로운 루틴이 추가되었습니다!");
@@ -133,37 +162,105 @@ function Dashboard() {
         }
     }
 
-    const filteredTasks = tasks.filter(task => task.game_name === activeTab); // game_name은 serializer에서 옴
+    const handleAddSeasonTask = async () => {
+        if (!newSeasonTitle) return alert("콘텐츠 이름을 입력해주세요.");
+        const gameId = GAME_IDS[activeTab];
+
+        try {
+            await axios.post('/scheduler/tasks/', {
+                title: newSeasonTitle,
+                game: gameId,
+                reset_type: newSeasonType,
+                due_date: newSeasonDueDate || null,
+                priority: 1
+            });
+            setNewSeasonTitle('');
+            setNewSeasonDueDate('');
+            setShowSeasonForm(false);
+            fetchData();
+        } catch (error) {
+            console.error("시즌 일정 추가 실패:", error);
+            alert("일정 추가 중 문제가 발생했습니다.");
+        }
+    }
+
+    const filteredTasks = tasks.filter(task => task.game_name === activeTab);
 
     const seasonTasks = filteredTasks.filter(t => ['FOUR_WEEKS', 'PATCH', 'BIWEEKLY', 'MONTHLY'].includes(t.reset_type));
     const routineTasks = filteredTasks.filter(t => ['DAILY', 'WEEKLY'].includes(t.reset_type));
 
-    // 유저 정보 가져오기
     const user = JSON.parse(localStorage.getItem('user_info') || '{}');
 
-    // 차트 데이터 구성
-    const chartData = {
+    // 숙제 달성률 계산
+    const totalTasks = filteredTasks.length;
+    const doneTasks = filteredTasks.filter(t => doneIds.includes(t.id)).length;
+    const donePercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+
+    // ★ Feature 1: 게임별 지출 Bar 차트
+    const barChartData = {
         labels: ['명조', '니케'],
-        datasets: [
-            {
-                label: '이번 달 지출',
-                data: [spending.breakdown.ww, spending.breakdown.nikke],
-                backgroundColor: ['#00e5ff', '#ff3333'],
-                borderRadius: 5,
-            },
-        ],
+        datasets: [{
+            label: '이번 달 지출',
+            data: [spending.breakdown.ww, spending.breakdown.nikke],
+            backgroundColor: ['#00e5ff', '#ff3333'],
+            borderRadius: 5,
+        }],
+    };
+    const barChartOptions = {
+        responsive: true,
+        plugins: { legend: { display: false }, title: { display: true, text: '게임별 지출 현황', color: '#888' } },
+        scales: { y: { beginAtZero: true, grid: { color: '#333' }, ticks: { color: '#888' } }, x: { grid: { display: false }, ticks: { color: '#888' } } },
     };
 
-    const chartOptions = {
+    // ★ Feature 1: 숙제 달성률 도넛 차트
+    const doughnutData = {
+        labels: ['완료', '미완료'],
+        datasets: [{
+            data: [doneTasks, totalTasks - doneTasks],
+            backgroundColor: ['#4caf50', '#333'],
+            borderWidth: 0,
+            cutout: '75%',
+        }],
+    };
+    const doughnutOptions = {
         responsive: true,
-        plugins: {
-            legend: { display: false },
-            title: { display: true, text: '게임별 지출 현황', color: '#888' },
-        },
-        scales: {
-            y: { beginAtZero: true, grid: { color: '#333' }, ticks: { color: '#888' } },
-            x: { grid: { display: false }, ticks: { color: '#888' } },
-        },
+        plugins: { legend: { display: false } },
+    };
+
+    // ★ Feature 1: 카테고리별 지출 도넛 차트
+    const catBreakdown = spending.category_breakdown || {};
+    const catLabels = Object.values(catBreakdown).map(c => c.name);
+    const catValues = Object.values(catBreakdown).map(c => c.total);
+    const catColors = ['#ff6384', '#36a2eb', '#ffce56', '#9966ff'];
+
+    const categoryDoughnutData = {
+        labels: catLabels.length ? catLabels : ['데이터 없음'],
+        datasets: [{
+            data: catValues.length ? catValues : [1],
+            backgroundColor: catValues.length ? catColors : ['#333'],
+            borderWidth: 0,
+        }],
+    };
+
+    // ★ Feature 1: 월별 지출 추이 라인 차트
+    const trendLabels = spendingTrend.map(m => m.label);
+    const trendValues = spendingTrend.map(m => m.total);
+    const lineChartData = {
+        labels: trendLabels,
+        datasets: [{
+            label: '월별 지출',
+            data: trendValues,
+            borderColor: '#00d2ff',
+            backgroundColor: 'rgba(0, 210, 255, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: '#00d2ff',
+        }],
+    };
+    const lineChartOptions = {
+        responsive: true,
+        plugins: { legend: { display: false }, title: { display: true, text: '최근 6개월 지출 추이', color: '#888' } },
+        scales: { y: { beginAtZero: true, grid: { color: '#222' }, ticks: { color: '#888' } }, x: { grid: { display: false }, ticks: { color: '#888' } } },
     };
 
     return (
@@ -173,7 +270,6 @@ function Dashboard() {
             </div>
 
             <div className="tabs">
-
                 <button className={`tab-btn ww ${activeTab === '명조' ? 'active' : ''}`} onClick={() => setActiveTab('명조')}>🌊 명조</button>
                 <button className={`tab-btn nikke ${activeTab === '니케' ? 'active' : ''}`} onClick={() => setActiveTab('니케')}>🍑 니케</button>
             </div>
@@ -186,7 +282,6 @@ function Dashboard() {
                     </button>
                 </div>
                 <div className="money-total">
-
                     {activeTab === '명조'
                         ? spending.breakdown.ww.toLocaleString()
                         : spending.breakdown.nikke.toLocaleString()}원
@@ -201,14 +296,76 @@ function Dashboard() {
                 </div>
             </div>
 
-            {/* 차트 영역 (가계부 카드 아래) */}
-            <div className="chart-card">
-                <Bar options={chartOptions} data={chartData} />
+            {/* ★ 차트 그리드 */}
+            <div className="chart-grid">
+                <div className="chart-card">
+                    <Bar options={barChartOptions} data={barChartData} />
+                </div>
+                <div className="chart-card doughnut-card">
+                    <div className="doughnut-label">숙제 달성률</div>
+                    <div className="doughnut-wrapper">
+                        <Doughnut data={doughnutData} options={doughnutOptions} />
+                        <div className="doughnut-center">{donePercent}%</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="chart-grid">
+                <div className="chart-card">
+                    <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px', textAlign: 'center' }}>카테고리별 지출</div>
+                    <Doughnut data={categoryDoughnutData} options={{ responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#888', font: { size: 11 } } } } }} />
+                </div>
+                <div className="chart-card">
+                    <Line options={lineChartOptions} data={lineChartData} />
+                </div>
             </div>
 
 
             <div className="task-section">
-                <div className="section-title">🔥 엔드 콘텐츠 (Season)</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', borderBottom: '2px solid #333', paddingBottom: '10px', marginBottom: '10px' }}>
+                    <div className="section-title" style={{ margin: 0, border: 'none' }}>🔥 엔드 콘텐츠 (Season)</div>
+                    <button onClick={() => setShowSeasonForm(!showSeasonForm)} style={{ background: '#333', color: '#fff', border: 'none', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer' }}>
+                        {showSeasonForm ? '닫기' : '+ 일정 추가'}
+                    </button>
+                </div>
+
+                {showSeasonForm && (
+                    <div className="routine-form" style={{ marginBottom: '15px', background: '#222', padding: '10px', borderRadius: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                type="text"
+                                placeholder="콘텐츠 이름 (예: 심연 콘텐츠)"
+                                value={newSeasonTitle}
+                                onChange={(e) => setNewSeasonTitle(e.target.value)}
+                                style={{ flex: 2, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
+                            />
+                            <select
+                                value={newSeasonType}
+                                onChange={(e) => setNewSeasonType(e.target.value)}
+                                style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
+                            >
+                                <option value="FOUR_WEEKS">4주 (시즌)</option>
+                                <option value="PATCH">패치 (6주)</option>
+                                <option value="BIWEEKLY">격주 (2주)</option>
+                                <option value="MONTHLY">매월</option>
+                            </select>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                type="date"
+                                value={newSeasonDueDate}
+                                onChange={(e) => setNewSeasonDueDate(e.target.value)}
+                                style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #444', background: '#333', color: '#fff' }}
+                                placeholder="마감일"
+                            />
+                            <button onClick={handleAddSeasonTask} style={{ background: '#ff9800', color: '#000', border: 'none', borderRadius: '4px', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>
+                                추가
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {seasonTasks.length === 0 && <div className="empty-msg">등록된 시즌 콘텐츠가 없습니다.</div>}
                 {seasonTasks.map(task => <TaskItem key={task.id} task={task} isDone={doneIds.includes(task.id)} onToggle={() => handleToggle(task.id)} />)}
             </div>
 
@@ -243,6 +400,7 @@ function Dashboard() {
                     </div>
                 )}
 
+                {routineTasks.length === 0 && <div className="empty-msg">등록된 루틴이 없습니다.</div>}
                 {routineTasks.map(task => <TaskItem key={task.id} task={task} isDone={doneIds.includes(task.id)} onToggle={() => handleToggle(task.id)} />)}
             </div>
 

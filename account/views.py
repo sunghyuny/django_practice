@@ -8,11 +8,13 @@ from .serializers import RegisterSerializer, UserSerializer, LoginSerializer
 # 1. 회원가입 (POST /api/account/register/)
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny] # 누구나 가입 가능
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []  # JWT 인증 체크 비활성화 (공개 엔드포인트)
 
 # 2. 로그인 (POST /api/account/login/) -> JWT 토큰 발급
 class LoginView(APIView):
     permission_classes = [permissions.AllowAny]
+    authentication_classes = []  # JWT 인증 체크 비활성화 (공개 엔드포인트)
 
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -34,8 +36,8 @@ class LoginView(APIView):
         
         return Response({'error': '이메일 또는 비밀번호가 일치하지 않습니다.'}, status=status.HTTP_401_UNAUTHORIZED)
 
-# 3. 내 정보 조회 (GET /api/account/me/)
-class UserDetailView(generics.RetrieveAPIView):
+# 3. 내 정보 조회 + 수정 (GET/PATCH /api/account/me/)
+class UserDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
 

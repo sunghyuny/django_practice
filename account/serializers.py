@@ -24,7 +24,7 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         # 모델에 정의된 필드들 중 보여줄 것만 선택
-        fields = ('email', 'nickname', 'is_staff')
+        fields = ('email', 'nickname', 'is_staff', 'discord_webhook_url')
 
 # 3. 로그인용 (이메일/비번만 받음)
 class LoginSerializer(serializers.Serializer):
