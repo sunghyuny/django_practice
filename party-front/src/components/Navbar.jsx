@@ -39,6 +39,10 @@ function Navbar() {
                 <span className="nav-icon">🎯</span>
                 <span className="nav-label">위시리스트</span>
             </NavLink>
+            <NavLink to="/gacha" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <span className="nav-icon">🎰</span>
+                <span className="nav-label">스케줄러</span>
+            </NavLink>
             <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <span className="nav-icon">⚙️</span>
                 <span className="nav-label">설정</span>

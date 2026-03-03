@@ -81,3 +81,23 @@ class SavingGoal(models.Model):
         if self.target_amount <= 0:
             return 100
         return min(round((self.saved_amount / self.target_amount) * 100, 1), 100)
+
+class GachaProfile(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    game = models.ForeignKey(Game, on_delete=models.CASCADE)
+    
+    # 보유 재화
+    currency = models.IntegerField(default=0)  # 명조: 별의소리 / 니케: 쥬얼
+    tickets = models.IntegerField(default=0)   # 명조: 회오리의 무늬 / 니케: 특수 모집 티켓
+    
+    # 천장 상태
+    pity_stack = models.IntegerField(default=0)        # 명조: 스택(0~80) / 니케: 골드 마일리지
+    is_guaranteed = models.BooleanField(default=False) # 명조 전용: 반천장 픽뚫(확천장) 여부
+    
+    # 미래 재화 획득 기준치 (명조 전용)
+    has_monthly_pass = models.BooleanField(default=True)
+    tower_avg_stars = models.IntegerField(default=800)   # 역경의 탑 1주기(약 14일)당 획득량
+    ruins_avg_reward = models.IntegerField(default=800)  # 바닷속 폐허 1주기(약 30일) 획득량
+
+    # 목표 스케줄
+    target_date = models.DateField(null=True, blank=True) # 목표 픽업 마감일

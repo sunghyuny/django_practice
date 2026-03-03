@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import GameViewSet, TaskViewSet, TaskLogViewSet, SpendingViewSet, SavingGoalViewSet
+from .views import GameViewSet, TaskViewSet, TaskLogViewSet, SpendingViewSet, SavingGoalViewSet, GachaProfileViewSet
 
 router = DefaultRouter()
 router.register(r'games', GameViewSet)
@@ -8,6 +8,7 @@ router.register(r'tasks', TaskViewSet, basename='task')
 router.register(r'logs', TaskLogViewSet, basename='tasklog')
 router.register(r'spendings', SpendingViewSet, basename='spending')
 router.register(r'saving-goals', SavingGoalViewSet, basename='savinggoal')
+router.register(r'gacha-profiles', GachaProfileViewSet, basename='gachaprofile')
 
 urlpatterns = [
     path('', include(router.urls)),

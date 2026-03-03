@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Game, Task, TaskLog, Spending, SavingGoal
+from .models import Game, Task, TaskLog, Spending, SavingGoal, GachaProfile
 
 class GameSerializer(serializers.ModelSerializer):
     class Meta:
@@ -41,3 +41,12 @@ class SavingGoalSerializer(serializers.ModelSerializer):
         model = SavingGoal
         fields = '__all__'
         read_only_fields = ('user', 'is_achieved')
+
+# ★ [NEW] 가챠/픽업 플래너
+class GachaProfileSerializer(serializers.ModelSerializer):
+    game_name = serializers.ReadOnlyField(source='game.name')
+
+    class Meta:
+        model = GachaProfile
+        fields = '__all__'
+        read_only_fields = ('user',)

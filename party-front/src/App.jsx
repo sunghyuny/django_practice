@@ -1,3 +1,4 @@
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import Login from './components/Login';
@@ -8,8 +9,8 @@ import WishList from './components/WishList';
 import ScreenshotUpload from './components/ScreenshotUpload';
 import Settings from './components/Settings';
 import Navbar from './components/Navbar';
+import GachaPlanner from './components/GachaPlanner'; // [NEW]
 import './App.css';
-
 
 // 메인 페이지 (Landing)
 function MainPage() {
@@ -26,7 +27,6 @@ function MainPage() {
   );
 }
 
-
 function App() {
   return (
     <BrowserRouter>
@@ -39,6 +39,7 @@ function App() {
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/wishlist" element={<WishList />} />
         <Route path="/screenshot" element={<ScreenshotUpload />} />
+        <Route path="/gacha" element={<GachaPlanner />} /> {/* [NEW] */}
         <Route path="/settings" element={<Settings />} />
       </Routes>
       <Navbar />
