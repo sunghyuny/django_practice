@@ -1,7 +1,4 @@
-# 잡탕밥
- .venv\Scripts\activate
 
----
 
 ## 2026-03-03 업데이트
 
